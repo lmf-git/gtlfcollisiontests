@@ -46,7 +46,7 @@ class FPSController {
     this.velocity = new THREE.Vector3()
     this.direction = new THREE.Vector3()
     this.moveSpeed = 5
-    this.jumpForce = 8
+    this.jumpForce = 6
     this.mouseSensitivity = 0.002
     this.isGrounded = false
     this.keys = {}
@@ -128,7 +128,7 @@ class FPSController {
     const ray = new RAPIER.Ray(this.groundRayOrigin, this.groundRayDir)
     const hit = world.castRay(ray, 0.5, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS)
     
-    this.isGrounded = hit !== null && (bodyVel.y <= 0.1 || hit.toi < 0.1)
+    this.isGrounded = hit !== null && (bodyVel.y <= 0.2 || hit.toi < 0.2)
     
     if (debugRayHelper) {
       const endPoint = this.groundRayOrigin.clone().add(this.groundRayDir.clone().multiplyScalar(0.5))
@@ -200,27 +200,29 @@ class FPSController {
   updateInVehicle(deltaTime) {
     if (!this.vehicleTransform) return
     
-    const vehicleQuat = this.vehicleTransform.quaternion
-    const localDirection = this.direction.clone()
-    localDirection.applyQuaternion(vehicleQuat)
+    const cameraDirection = new THREE.Vector3()
+    this.camera.getWorldDirection(cameraDirection)
+    cameraDirection.y = 0
+    cameraDirection.normalize()
+    
+    const cameraRight = new THREE.Vector3()
+    cameraRight.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0))
+    
+    const moveDirection = new THREE.Vector3()
+    moveDirection.addScaledVector(cameraDirection, -this.direction.z)
+    moveDirection.addScaledVector(cameraRight, this.direction.x)
     
     const currentVel = this.body.linvel()
     const vehicleVel = vehicleBody.linvel()
     
-    const relativeVel = {
-      x: localDirection.x * this.moveSpeed,
-      y: currentVel.y - vehicleVel.y,
-      z: localDirection.z * this.moveSpeed
-    }
-    
     const worldVel = {
-      x: relativeVel.x + vehicleVel.x,
-      y: relativeVel.y + vehicleVel.y,
-      z: relativeVel.z + vehicleVel.z
+      x: moveDirection.x * this.moveSpeed + vehicleVel.x,
+      y: currentVel.y,
+      z: moveDirection.z * this.moveSpeed + vehicleVel.z
     }
     
     if (this.keys['Space'] && this.isGrounded) {
-      worldVel.y += this.jumpForce
+      worldVel.y = this.jumpForce
     }
     
     this.body.setLinvel(worldVel, true)
@@ -229,13 +231,11 @@ class FPSController {
   enterVehicle(vehicleTransform) {
     this.isInVehicle = true
     this.vehicleTransform = vehicleTransform
-    this.world.gravity = { x: 0, y: 0, z: 0 }
   }
 
   exitVehicle() {
     this.isInVehicle = false
     this.vehicleTransform = null
-    this.world.gravity = { x: 0, y: -9.81, z: 0 }
   }
 }
 
@@ -253,7 +253,7 @@ onMounted(async () => {
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   
-  world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
+  world = new RAPIER.World({ x: 0, y: -12, z: 0 })
   
   const ambientLight = new THREE.AmbientLight(0x404040, 0.6)
   scene.add(ambientLight)
